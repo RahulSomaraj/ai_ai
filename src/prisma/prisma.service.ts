@@ -7,12 +7,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(private readonly configService: ConfigService) {
+    const databaseConfig = configService.get('database');
     super({
       datasources: {
         db: {
-          url: configService.get<string>('DATABASE_URL'),
+          url: databaseConfig.url,
         },
       },
+      log: databaseConfig.logging ? ['query', 'info', 'warn', 'error'] : ['warn', 'error'],
     });
   }
 

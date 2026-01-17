@@ -5,8 +5,16 @@ import { ConfigService } from '@nestjs/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+
   const logger = new Logger('Bootstrap');
+  const configService = app.get(ConfigService);
+
+  // Get configurations
+  const appConfig = configService.get('app');
+  const swaggerConfig = configService.get('swagger');
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -14,28 +22,51 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
 
-  // Get ConfigService
-  const configService = app.get(ConfigService);
+  // Global API prefix
+  app.setGlobalPrefix(appConfig.globalPrefix);
+
+  // CORS configuration
+  if (appConfig.cors.enabled) {
+    app.enableCors({
+      origin: appConfig.cors.origin,
+    });
+  }
 
   // Swagger configuration
-  const config = new DocumentBuilder()
-    .setTitle('AI AI API - Syllabus-Controlled RAG System')
-    .setDescription(
-      'RAG system that uses frozen syllabus as policy to control AI responses. ' +
-        'Separates syllabus (policy) from content (data) to prevent hallucination and ensure exam-aligned answers.',
-    )
-    .setVersion('1.0')
+  if (swaggerConfig.enabled && appConfig.env !== 'production') {
+    const swaggerBuilder = new DocumentBuilder()
+      .setTitle(swaggerConfig.title)
+      .setDescription(swaggerConfig.description)
+      .setVersion(swaggerConfig.version);
 
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+    if (swaggerConfig.contact.name) {
+      swaggerBuilder.setContact(
+        swaggerConfig.contact.name,
+        swaggerConfig.contact.email,
+        swaggerConfig.contact.url,
+      );
+    }
 
-  const port = configService.get<number>('PORT') ?? 3000;
-  await app.listen(port);
-  logger.log(`Application is running on: http://localhost:${port}`);
-  logger.log(`Swagger documentation: http://localhost:${port}/api`);
+    if (swaggerConfig.bearerAuth.enabled) {
+      swaggerBuilder.addBearerAuth();
+    }
+
+    const document = SwaggerModule.createDocument(app, swaggerBuilder.build());
+    SwaggerModule.setup(swaggerConfig.path, app, document);
+    logger.log(`📘 Swagger docs: http://localhost:${appConfig.port}/${swaggerConfig.path}`);
+  }
+
+  // Start server
+  await app.listen(appConfig.port, appConfig.host);
+
+  logger.log(`🚀 ${appConfig.name} v${appConfig.version} running on http://localhost:${appConfig.port}/${appConfig.globalPrefix}`);
+  logger.log(`🌍 Environment: ${appConfig.env}`);
 }
+
 bootstrap();
