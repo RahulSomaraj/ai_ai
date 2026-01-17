@@ -1,0 +1,70 @@
+{
+  "board": "CBSE",
+  "grade": "11",
+  "subject": "Physics",
+  "language": "English",
+  "version": "2025",
+  "units": [
+    {
+      "unit_id": "PHY_U1",
+      "unit_name": "Units and Measurement",
+      "topics": [
+        {
+          "topic_id": "PHY_U1_T1",
+          "topic_name": "Introduction to Physical Measurement",
+          "learning_outcomes": [
+            "Define physical quantity",
+            "Explain the need for measurement",
+            "Differentiate fundamental and derived quantities"
+          ]
+        },
+        {
+          "topic_id": "PHY_U1_T2",
+          "topic_name": "International System of Units (SI)",
+          "learning_outcomes": [
+            "List SI base quantities and their units",
+            "Identify SI derived units",
+            "Use SI prefixes for unit conversion"
+          ]
+        },
+        {
+          "topic_id": "PHY_U1_T3",
+          "topic_name": "Significant Figures",
+          "learning_outcomes": [
+            "Define significant figures",
+            "Determine significant figures in a given measurement",
+            "Apply rules of significant figures in calculations",
+            "Apply rounding off rules to numerical results"
+          ]
+        },
+        {
+          "topic_id": "PHY_U1_T4",
+          "topic_name": "Dimensions of Physical Quantities",
+          "learning_outcomes": [
+            "Define dimensions of a physical quantity",
+            "Express physical quantities in terms of base dimensions",
+            "Identify dimensional representations of common quantities"
+          ]
+        },
+        {
+          "topic_id": "PHY_U1_T5",
+          "topic_name": "Dimensional Formulae and Equations",
+          "learning_outcomes": [
+            "Write dimensional formulae for physical quantities",
+            "Construct dimensional equations",
+            "Interpret dimensional representations"
+          ]
+        },
+        {
+          "topic_id": "PHY_U1_T6",
+          "topic_name": "Dimensional Analysis and Applications",
+          "learning_outcomes": [
+            "Check dimensional consistency of equations",
+            "Use dimensional analysis to derive relations",
+            "Identify limitations of dimensional analysis"
+          ]
+        }
+      ]
+    }
+  ]
+}
