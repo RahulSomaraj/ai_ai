@@ -59,7 +59,7 @@ async function bootstrap() {
 
     const document = SwaggerModule.createDocument(app, swaggerBuilder.build());
     SwaggerModule.setup(swaggerConfig.path, app, document);
-    logger.log(`📘 Swagger docs: http://localhost:${appConfig.port}/${swaggerConfig.path}`);
+    logger.log(`📘 Swagger docs: http://${appConfig.host === '0.0.0.0' ? 'localhost' : appConfig.host}:${appConfig.port}/${swaggerConfig.path}`);
   }
 
   // Start server
