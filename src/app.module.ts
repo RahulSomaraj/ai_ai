@@ -6,9 +6,6 @@ import { PrismaModule } from './prisma/prisma.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { TextbooksModule } from './textbooks/textbooks.module';
 import { SyllabusModule } from './syllabus/syllabus.module';
-import { ContentModule } from './content/content.module';
-import { RAGModule } from './rag/rag.module';
-import { EmbeddingsModule } from './embeddings/embeddings.module';
 
 @Module({
   imports: [
@@ -19,10 +16,7 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
     PrismaModule,
     SubjectsModule,
     TextbooksModule,
-    EmbeddingsModule,
     SyllabusModule,
-    ContentModule,
-    RAGModule,
   ],
   controllers: [AppController],
   providers: [AppService],
