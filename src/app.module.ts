@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { SubjectsModule } from './subjects/subjects.module';
+import { TextbooksModule } from './textbooks/textbooks.module';
 import { SyllabusModule } from './syllabus/syllabus.module';
 import { ContentModule } from './content/content.module';
 import { RAGModule } from './rag/rag.module';
@@ -13,6 +16,9 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    PrismaModule,
+    SubjectsModule,
+    TextbooksModule,
     EmbeddingsModule,
     SyllabusModule,
     ContentModule,

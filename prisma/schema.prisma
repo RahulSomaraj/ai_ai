@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// FOUNDATION ENTITIES (Academic Structure)
+// ============================================
+
+model Subject {
+  id        String     @id @default(uuid())
+  name      String     // e.g., "Physics"
+  class     Int        // e.g., 11
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  textbooks Textbook[]
+
+  // Indexes for common queries
+  @@index([name, class])
+  @@map("subjects")
+}
+
+model Textbook {
+  id         String   @id @default(uuid())
+  subjectId String
+  title      String   // e.g., "Physics Part 1"
+  code       String?  // e.g., "PH11-P1" (optional identifier)
+  order      Int      // Order within subject (1, 2, 3...)
+  source     String   @default("NCERT") // e.g., "NCERT", "State Board"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([subjectId, order])
+  @@unique([subjectId, order])
+  @@map("textbooks")
+}
+
+// ============================================
+// FUTURE: Syllabus will attach here
+// ============================================
+// When ready, add:
+// model Chapter {
+//   id         String   @id @default(uuid())
+//   textbookId String
+//   title      String
+//   order      Int
+//   textbook   Textbook @relation(fields: [textbookId], references: [id])
+//   topics     Topic[]
+//   ...
+// }

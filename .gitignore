@@ -59,3 +59,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /data/syllabus/*
 !/data/syllabus/sample_syllabus.json
 /data/content/*
+
+/generated/prisma
