@@ -3,9 +3,14 @@ import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { TransformOptionalTextbookId } from '../utils/optional-textbook-id';
 
 export class AskRagDto {
-  @ApiProperty({ description: 'Canonical subject ID from subjects table' })
+  @ApiPropertyOptional({
+    description:
+      'Optional canonical subject ID from subjects table. Omit for class-only retrieval.',
+    example: 'seed-11-physics',
+  })
+  @IsOptional()
   @IsString()
-  subjectId: string;
+  subjectId?: string;
 
   @ApiPropertyOptional({
     description: 'Canonical textbook ID from textbooks table (omit unless set)',
@@ -23,9 +28,14 @@ export class AskRagDto {
   @IsString()
   question: string;
 
-  @ApiProperty({ description: 'Subject filter for retrieval', example: 'Science' })
+  @ApiPropertyOptional({
+    description:
+      'Optional subject name filter. Omit for class-only retrieval across all subjects.',
+    example: 'Physics',
+  })
+  @IsOptional()
   @IsString()
-  subject: string;
+  subject?: string;
 
   @ApiProperty({ description: 'Class level filter', example: 10, minimum: 1, maximum: 12 })
   @IsInt()

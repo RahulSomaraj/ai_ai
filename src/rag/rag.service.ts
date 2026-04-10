@@ -24,6 +24,7 @@ type RetrievedChunk = {
   content: string;
   doc_id: string;
   title: string;
+  subject: string;
   chapter: string;
   similarity: number;
 };
@@ -161,6 +162,53 @@ export class RagService {
     return { subjectRecord, textbookRecord };
   }
 
+  private async resolveAskScope(payload: AskRagDto): Promise<{
+    subjectNameFilter: string | null;
+    subjectId: string | null;
+    textbookId: string | null;
+    classLevel: number;
+  }> {
+    const subjectId = payload.subjectId?.trim() || null;
+    const subjectName = payload.subject?.trim() || null;
+    const textbookId = normalizeOptionalTextbookId(payload.textbookId) ?? null;
+
+    if (subjectId) {
+      const { subjectRecord } = await this.validateAcademicScope(
+        subjectId,
+        textbookId ?? undefined,
+        payload.classLevel,
+      );
+      return {
+        subjectNameFilter: subjectRecord.name,
+        subjectId: subjectRecord.id,
+        textbookId,
+        classLevel: subjectRecord.class,
+      };
+    }
+
+    if (textbookId) {
+      throw new BadRequestException(
+        'textbookId requires subjectId for validation. Omit textbookId in class-only mode.',
+      );
+    }
+
+    if (subjectName) {
+      return {
+        subjectNameFilter: subjectName,
+        subjectId: null,
+        textbookId: null,
+        classLevel: payload.classLevel,
+      };
+    }
+
+    return {
+      subjectNameFilter: null,
+      subjectId: null,
+      textbookId: null,
+      classLevel: payload.classLevel,
+    };
+  }
+
   private async persistIngest(payload: {
     title: string;
     subject: string;
@@ -258,11 +306,7 @@ export class RagService {
       );
     }
 
-    const { subjectRecord } = await this.validateAcademicScope(
-      payload.subjectId,
-      payload.textbookId,
-      payload.classLevel,
-    );
+    const scope = await this.resolveAskScope(payload);
 
     const embedModel = rag?.embeddingModel ?? 'text-embedding-3-small';
     const chatModel = rag?.chatModel ?? 'gpt-4o-mini';
@@ -284,12 +328,17 @@ export class RagService {
         c.content,
         d.id AS doc_id,
         d.title,
+        d.subject,
         d.chapter,
         (1 - (ce.embedding <=> $1::vector(1536)))::float8 AS similarity
       FROM chunks c
       INNER JOIN chunk_embeddings ce ON ce.chunk_id = c.id
       INNER JOIN documents d ON d.id = c.document_id
-      WHERE d.subject = $2 AND d.class_level = $3
+      WHERE d.class_level = $3
+        AND (
+          $2::text IS NULL OR TRIM($2::text) = '' OR
+          d.subject ILIKE $2::text
+        )
         AND (
           $4::text IS NULL OR TRIM($4::text) = '' OR
           d.chapter ILIKE '%' || $4::text || '%'
@@ -298,8 +347,8 @@ export class RagService {
       LIMIT $5
       `,
       qLiteral,
-      subjectRecord.name,
-      subjectRecord.class,
+      scope.subjectNameFilter,
+      scope.classLevel,
       chapterFilter,
       Math.min(32, Math.max(topK * 4, topK)),
     );
@@ -313,17 +362,17 @@ export class RagService {
       return {
         status: 'no_context',
         answer:
-          'No indexed textbook passages found for this subject/class (or embeddings are missing). Ingest content or run embedding backfill for existing documents.',
+          'No indexed textbook passages found for the requested class scope (or embeddings are missing). Ingest content or run embedding backfill for existing documents.',
         citations: [],
         confidence: 0,
         fallback: true,
         message:
           'No chunk_embeddings in scope. Ingest with OPENAI_API_KEY set, or index existing chunks.',
         received: {
-          subjectId: payload.subjectId,
-          textbookId: payload.textbookId ?? null,
-          subject: payload.subject,
-          classLevel: payload.classLevel,
+          subjectId: scope.subjectId,
+          textbookId: scope.textbookId,
+          subject: scope.subjectNameFilter,
+          classLevel: scope.classLevel,
           chapter: payload.chapter ?? null,
           topK,
         },
@@ -373,6 +422,7 @@ export class RagService {
       answer,
       citations: chosen.map((r) => ({
         documentId: r.doc_id,
+        subject: r.subject,
         title: r.title,
         chapter: r.chapter,
         chunkId: r.chunk_id,
@@ -384,10 +434,10 @@ export class RagService {
         ? `No passage met RAG_MIN_SIMILARITY (${minSimilarity}); used top ${chosen.length} nearest chunks.`
         : undefined,
       received: {
-        subjectId: payload.subjectId,
-        textbookId: payload.textbookId ?? null,
-        subject: payload.subject,
-        classLevel: payload.classLevel,
+        subjectId: scope.subjectId,
+        textbookId: scope.textbookId,
+        subject: scope.subjectNameFilter,
+        classLevel: scope.classLevel,
         chapter: payload.chapter ?? null,
         topK,
       },
