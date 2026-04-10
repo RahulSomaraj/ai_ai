@@ -25,7 +25,8 @@
     "prisma:validate": "prisma validate",
     "prisma:seed:test": "ts-node prisma/seed.ts",
     "prisma:curl-samples": "ts-node prisma/print-rag-curls.ts",
-    "prisma:seed:rag-physics11": "ts-node prisma/seed-rag-physics11.ts"
+    "prisma:seed:rag-physics11": "ts-node prisma/seed-rag-physics11.ts",
+    "prisma:seed:rag-physics-questions": "ts-node prisma/seed-rag-physics-questions.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
