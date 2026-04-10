@@ -12,7 +12,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
 
-  // Get configurations
+  // Get configurations safely
   const appConfig = configService.get('app');
   const swaggerConfig = configService.get('swagger');
 
@@ -29,44 +29,74 @@ async function bootstrap() {
   );
 
   // Global API prefix
-  app.setGlobalPrefix(appConfig.globalPrefix);
+  if (appConfig?.globalPrefix) {
+    app.setGlobalPrefix(appConfig.globalPrefix);
+  }
 
   // CORS configuration
-  if (appConfig.cors.enabled) {
+  if (appConfig?.cors?.enabled) {
     app.enableCors({
-      origin: appConfig.cors.origin,
+      origin: appConfig.cors.origin || '*',
     });
   }
 
   // Swagger configuration
-  if (swaggerConfig.enabled && appConfig.env !== 'production') {
-    const swaggerBuilder = new DocumentBuilder()
-      .setTitle(swaggerConfig.title)
-      .setDescription(swaggerConfig.description)
-      .setVersion(swaggerConfig.version);
+  if (swaggerConfig?.enabled) {
+    const builder = new DocumentBuilder()
+      .setTitle(swaggerConfig.title || 'API Docs')
+      .setDescription(swaggerConfig.description || 'API documentation')
+      .setVersion(swaggerConfig.version || '1.0');
 
-    if (swaggerConfig.contact.name) {
-      swaggerBuilder.setContact(
+    // FIXED: correct order → name, url, email
+    if (swaggerConfig?.contact?.name) {
+      builder.setContact(
         swaggerConfig.contact.name,
-        swaggerConfig.contact.email,
-        swaggerConfig.contact.url,
+        swaggerConfig.contact.url || '',
+        swaggerConfig.contact.email || '',
       );
     }
 
-    if (swaggerConfig.bearerAuth.enabled) {
-      swaggerBuilder.addBearerAuth();
+    // Better Bearer Auth config
+    if (swaggerConfig?.bearerAuth?.enabled) {
+      builder.addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+        'access-token',
+      );
     }
 
-    const document = SwaggerModule.createDocument(app, swaggerBuilder.build());
-    SwaggerModule.setup(swaggerConfig.path, app, document);
-    logger.log(`📘 Swagger docs: http://${appConfig.host === '0.0.0.0' ? 'localhost' : appConfig.host}:${appConfig.port}/${swaggerConfig.path}`);
+    const document = SwaggerModule.createDocument(app, builder.build());
+
+    // FIXED: include global prefix
+    const swaggerPath = appConfig?.globalPrefix
+      ? `${appConfig.globalPrefix}/${swaggerConfig.path}`
+      : swaggerConfig.path;
+
+    SwaggerModule.setup(swaggerPath, app, document);
+
+    const host =
+      appConfig?.host === '0.0.0.0' ? 'localhost' : appConfig?.host;
+
+    logger.log(
+      `📘 Swagger docs: http://${host}:${appConfig?.port}/${swaggerPath}`,
+    );
   }
 
   // Start server
-  await app.listen(appConfig.port, appConfig.host);
+  await app.listen(appConfig?.port || 3000, appConfig?.host || '0.0.0.0');
 
-  logger.log(`🚀 ${appConfig.name} v${appConfig.version} running on http://localhost:${appConfig.port}/${appConfig.globalPrefix}`);
-  logger.log(`🌍 Environment: ${appConfig.env}`);
+  logger.log(
+    `🚀 ${appConfig?.name || 'App'} v${
+      appConfig?.version || '1.0'
+    } running on http://localhost:${appConfig?.port}/${
+      appConfig?.globalPrefix || ''
+    }`,
+  );
+
+  logger.log(`🌍 Environment: ${appConfig?.env || 'development'}`);
 }
 
 bootstrap();

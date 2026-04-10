@@ -48,6 +48,51 @@ model Textbook {
   @@map("textbooks")
 }
 
+model RagDocument {
+  id         String   @id @default(uuid())
+  title      String
+  subject    String
+  classLevel Int      @map("class_level")
+  chapter    String
+  exercise   String?
+  sourceType String   @default("ncert_book") @map("source_type")
+  sourcePath String?  @map("source_path")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  chunks RagChunk[]
+
+  @@index([subject, classLevel, chapter])
+  @@map("documents")
+}
+
+model RagChunk {
+  id         String   @id @default(uuid())
+  documentId String   @map("document_id")
+  chunkIndex Int      @map("chunk_index")
+  content    String
+  tokenCount Int      @map("token_count")
+  pageNo     Int?     @map("page_no")
+  section    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document  RagDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embedding RagChunkEmbedding?
+
+  @@index([documentId, chunkIndex])
+  @@map("chunks")
+}
+
+model RagChunkEmbedding {
+  chunkId   String                  @id @map("chunk_id")
+  embedding Unsupported("vector(1536)")
+  model     String
+  createdAt DateTime                @default(now()) @map("created_at")
+
+  chunk RagChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@map("chunk_embeddings")
+}
+
 // ============================================
 // FUTURE: Syllabus will attach here
 // ============================================

@@ -61,23 +61,24 @@ export class SubjectsService {
   }
 
   async findByClassAndName(classNumber: number, name: string) {
+    const normalizedName = name.trim().toLowerCase();
+
     const subject = await this.prisma.subject.findFirst({
       where: {
         class: classNumber,
-        name: {
-          equals: name,
-          mode: 'insensitive',
-        },
+        name: { equals: name.trim(), mode: 'insensitive' },
       },
       include: {
-        textbooks: {
-          orderBy: { order: 'asc' },
-        },
-        _count: {
-          select: { textbooks: true },
-        },
+        textbooks: { orderBy: { order: 'asc' } },
+        _count: { select: { textbooks: true } },
       },
     });
+
+    if (!subject) {
+      throw new NotFoundException(
+        `No subject named "${normalizedName}" found for class ${classNumber}.`,
+      );
+    }
 
     return subject;
   }

@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { TextbooksModule } from './textbooks/textbooks.module';
 import { SyllabusModule } from './syllabus/syllabus.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SyllabusModule } from './syllabus/syllabus.module';
     SubjectsModule,
     TextbooksModule,
     SyllabusModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [AppService],
