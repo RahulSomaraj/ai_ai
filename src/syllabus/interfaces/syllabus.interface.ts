@@ -30,3 +30,14 @@ export interface QueryMapping {
   isInScope: boolean;
   reason?: string;
 }
+
+export interface CurrentTopic {
+  board: string;
+  grade: string;
+  subject: string;
+  unit_id: string;
+  unit_name: string;
+  topic_id: string;
+  topic_name: string;
+  learning_outcomes: string[];
+}

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { TransformOptionalTextbookId } from '../utils/optional-textbook-id';
 
 export class AskRagDto {
@@ -36,6 +36,16 @@ export class AskRagDto {
   @IsOptional()
   @IsString()
   subject?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, retrieval ignores subject/subjectId filter and searches all subjects for classLevel. ' +
+      'subjectId may still be sent to validate textbook scope and to align classLevel with the subject row.',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  crossSubject?: boolean;
 
   @ApiProperty({ description: 'Class level filter', example: 10, minimum: 1, maximum: 12 })
   @IsInt()

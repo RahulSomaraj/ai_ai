@@ -11,7 +11,11 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SyllabusService } from './syllabus.service';
 import { CreateSyllabusDto, QueryMappingDto } from './dto/syllabus.dto';
-import { Syllabus, QueryMapping } from './interfaces/syllabus.interface';
+import {
+  Syllabus,
+  QueryMapping,
+  CurrentTopic,
+} from './interfaces/syllabus.interface';
 
 @ApiTags('Syllabus')
 @Controller('syllabus')
@@ -23,6 +27,17 @@ export class SyllabusController {
   @ApiResponse({ status: 201, description: 'Syllabus created successfully' })
   async createSyllabus(@Body() createSyllabusDto: CreateSyllabusDto): Promise<Syllabus> {
     return this.syllabusService.createSyllabus(createSyllabusDto);
+  }
+
+  @Get(':board/current-topics')
+  @ApiOperation({
+    summary: 'Get current topics across all classes for a board',
+  })
+  async getCurrentTopics(
+    @Param('board') board: string,
+    @Query('subject') subject?: string,
+  ): Promise<CurrentTopic[]> {
+    return this.syllabusService.getCurrentTopics(board, subject);
   }
 
   @Get(':board/:grade/:subject')

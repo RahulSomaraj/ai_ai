@@ -25,6 +25,7 @@ type RetrievedChunk = {
   doc_id: string;
   title: string;
   subject: string;
+  class_level: number;
   chapter: string;
   similarity: number;
 };
@@ -307,6 +308,8 @@ export class RagService {
     }
 
     const scope = await this.resolveAskScope(payload);
+    const subjectNameFilter =
+      payload.crossSubject === true ? null : scope.subjectNameFilter;
 
     const embedModel = rag?.embeddingModel ?? 'text-embedding-3-small';
     const chatModel = rag?.chatModel ?? 'gpt-4o-mini';
@@ -321,7 +324,7 @@ export class RagService {
     const chapterFilter =
       payload.chapter?.trim() ? payload.chapter.trim() : null;
 
-    const rawPool = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
+    const classScopedPool = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
       `
       SELECT
         c.id AS chunk_id,
@@ -329,6 +332,7 @@ export class RagService {
         d.id AS doc_id,
         d.title,
         d.subject,
+        d.class_level,
         d.chapter,
         (1 - (ce.embedding <=> $1::vector(1536)))::float8 AS similarity
       FROM chunks c
@@ -347,34 +351,78 @@ export class RagService {
       LIMIT $5
       `,
       qLiteral,
-      scope.subjectNameFilter,
+      subjectNameFilter,
       scope.classLevel,
       chapterFilter,
       Math.min(32, Math.max(topK * 4, topK)),
     );
 
-    const pool = rawPool.map((r) => ({
+    const classPool = classScopedPool.map((r) => ({
       ...r,
       similarity: Number(r.similarity),
     }));
+
+    let pool = classPool;
+    let globalClassFallback = false;
+
+    if (!pool.length) {
+      const globalPoolRaw = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
+        `
+        SELECT
+          c.id AS chunk_id,
+          c.content,
+          d.id AS doc_id,
+          d.title,
+          d.subject,
+          d.class_level,
+          d.chapter,
+          (1 - (ce.embedding <=> $1::vector(1536)))::float8 AS similarity
+        FROM chunks c
+        INNER JOIN chunk_embeddings ce ON ce.chunk_id = c.id
+        INNER JOIN documents d ON d.id = c.document_id
+        WHERE (
+          $2::text IS NULL OR TRIM($2::text) = '' OR
+          d.subject ILIKE $2::text
+        )
+          AND (
+            $3::text IS NULL OR TRIM($3::text) = '' OR
+            d.chapter ILIKE '%' || $3::text || '%'
+          )
+        ORDER BY ce.embedding <=> $1::vector(1536)
+        LIMIT $4
+        `,
+        qLiteral,
+        subjectNameFilter,
+        chapterFilter,
+        Math.min(32, Math.max(topK * 4, topK)),
+      );
+
+      pool = globalPoolRaw.map((r) => ({
+        ...r,
+        similarity: Number(r.similarity),
+      }));
+      globalClassFallback = pool.length > 0;
+    }
 
     if (!pool.length) {
       return {
         status: 'no_context',
         answer:
-          'No indexed textbook passages found for the requested class scope (or embeddings are missing). Ingest content or run embedding backfill for existing documents.',
+          'No indexed textbook passages found for the requested scope (or embeddings are missing). Ingest content or run embedding backfill for existing documents.',
         citations: [],
         confidence: 0,
         fallback: true,
         message:
-          'No chunk_embeddings in scope. Ingest with OPENAI_API_KEY set, or index existing chunks.',
+          'No chunk_embeddings found in class scope or global fallback scope.',
         received: {
           subjectId: scope.subjectId,
           textbookId: scope.textbookId,
-          subject: scope.subjectNameFilter,
+          subject: subjectNameFilter,
+          crossSubject: payload.crossSubject === true,
           classLevel: scope.classLevel,
           chapter: payload.chapter ?? null,
           topK,
+          usedGlobalClassFallback: globalClassFallback,
         },
       };
     }
@@ -422,6 +470,7 @@ export class RagService {
       answer,
       citations: chosen.map((r) => ({
         documentId: r.doc_id,
+        classLevel: r.class_level,
         subject: r.subject,
         title: r.title,
         chapter: r.chapter,
@@ -432,14 +481,18 @@ export class RagService {
       fallback: relaxedSimilarity,
       message: relaxedSimilarity
         ? `No passage met RAG_MIN_SIMILARITY (${minSimilarity}); used top ${chosen.length} nearest chunks.`
-        : undefined,
+        : globalClassFallback
+          ? `No class-${scope.classLevel} chunks found; used nearest chunks from available classes.`
+          : undefined,
       received: {
         subjectId: scope.subjectId,
         textbookId: scope.textbookId,
-        subject: scope.subjectNameFilter,
+        subject: subjectNameFilter,
+        crossSubject: payload.crossSubject === true,
         classLevel: scope.classLevel,
         chapter: payload.chapter ?? null,
         topK,
+        usedGlobalClassFallback: globalClassFallback,
       },
     };
   }

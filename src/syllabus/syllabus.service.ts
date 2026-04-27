@@ -4,6 +4,7 @@ import {
   Unit,
   Topic,
   QueryMapping,
+  CurrentTopic,
 } from './interfaces/syllabus.interface';
 import { CreateSyllabusDto } from './dto/syllabus.dto';
 import * as fs from 'fs/promises';
@@ -94,6 +95,60 @@ export class SyllabusService {
   ): Promise<Topic[]> {
     const syllabus = await this.getSyllabus(board, grade, subject);
     return syllabus.units.flatMap((unit) => unit.topics);
+  }
+
+  async getCurrentTopics(
+    board: string,
+    subject?: string,
+  ): Promise<CurrentTopic[]> {
+    const files = await fs.readdir(this.syllabusDir);
+    const normalizedBoard = board.trim().toLowerCase();
+    const normalizedSubject = subject?.trim().toLowerCase();
+    const topics: CurrentTopic[] = [];
+
+    for (const file of files) {
+      if (!file.toLowerCase().endsWith('.json')) {
+        continue;
+      }
+
+      const filePath = path.join(this.syllabusDir, file);
+      try {
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const syllabus = JSON.parse(fileContent) as Syllabus;
+
+        if ((syllabus.board ?? '').trim().toLowerCase() !== normalizedBoard) {
+          continue;
+        }
+
+        if (
+          normalizedSubject &&
+          (syllabus.subject ?? '').trim().toLowerCase() !== normalizedSubject
+        ) {
+          continue;
+        }
+
+        for (const unit of syllabus.units ?? []) {
+          for (const topic of unit.topics ?? []) {
+            topics.push({
+              board: syllabus.board,
+              grade: syllabus.grade,
+              subject: syllabus.subject,
+              unit_id: unit.unit_id,
+              unit_name: unit.unit_name,
+              topic_id: topic.topic_id,
+              topic_name: topic.topic_name,
+              learning_outcomes: topic.learning_outcomes ?? [],
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Skipping invalid syllabus file ${file}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return topics;
   }
 
   async getTopicById(
