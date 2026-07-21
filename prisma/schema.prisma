@@ -23,6 +23,7 @@ model Subject {
 
   // Relations
   textbooks Textbook[]
+  units     Unit[]
 
   // Indexes for common queries
   @@index([name, class])
@@ -47,6 +48,64 @@ model Textbook {
   @@unique([subjectId, order])
   @@map("textbooks")
 }
+
+// ============================================
+// SYLLABUS (Frozen policy: units & topics)
+// ============================================
+// Syllabus is now first-class in Postgres and scoped to a Subject
+// (subject name + class). Units group topics; topics carry learning
+// outcomes and become the retrieval-control unit for RAG.
+
+model Unit {
+  id        String   @id @default(uuid())
+  subjectId String   @map("subject_id")
+  code      String   // syllabus unit id, e.g. "PHY_U1"
+  name      String   // e.g. "Units and Measurement"
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics  Topic[]
+
+  @@unique([subjectId, code])
+  @@index([subjectId])
+  @@map("units")
+}
+
+model Topic {
+  id               String   @id @default(uuid())
+  unitId           String   @map("unit_id")
+  code             String   // syllabus topic id, e.g. "PHY_U1_T1"
+  name             String   // e.g. "Significant Figures"
+  learningOutcomes String[] @default([]) @map("learning_outcomes")
+  order            Int      @default(0)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  unit      Unit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  chunks    RagChunk[]
+  embedding TopicEmbedding?
+
+  @@unique([unitId, code])
+  @@index([unitId])
+  @@map("topics")
+}
+
+model TopicEmbedding {
+  topicId   String                      @id @map("topic_id")
+  embedding Unsupported("vector(1536)")
+  model     String
+  createdAt DateTime                    @default(now()) @map("created_at")
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@map("topic_embeddings")
+}
+
+// ============================================
+// RAG CONTENT (Documents, chunks, embeddings)
+// ============================================
 
 model RagDocument {
   id         String   @id @default(uuid())
@@ -73,12 +132,15 @@ model RagChunk {
   tokenCount Int      @map("token_count")
   pageNo     Int?     @map("page_no")
   section    String?
+  topicId    String?  @map("topic_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  document  RagDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document  RagDocument        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  topic     Topic?             @relation(fields: [topicId], references: [id], onDelete: SetNull)
   embedding RagChunkEmbedding?
 
   @@index([documentId, chunkIndex])
+  @@index([topicId])
   @@map("chunks")
 }
 
@@ -92,17 +154,3 @@ model RagChunkEmbedding {
 
   @@map("chunk_embeddings")
 }
-
-// ============================================
-// FUTURE: Syllabus will attach here
-// ============================================
-// When ready, add:
-// model Chapter {
-//   id         String   @id @default(uuid())
-//   textbookId String
-//   title      String
-//   order      Int
-//   textbook   Textbook @relation(fields: [textbookId], references: [id])
-//   topics     Topic[]
-//   ...
-// }

@@ -61,6 +61,36 @@ export class AskRagDto {
   @IsString()
   chapter?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Optional syllabus TOPIC code (e.g. "PHY_U1_T3"). Restricts retrieval to chunks ' +
+      'tagged with this syllabus topic. Requires a resolvable subject (subjectId, or subject + classLevel).',
+    example: 'PHY_U1_T3',
+  })
+  @IsOptional()
+  @IsString()
+  topicCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional syllabus UNIT code (e.g. "PHY_U1"). Restricts retrieval to chunks tagged ' +
+      'with any topic in this unit. Requires a resolvable subject.',
+    example: 'PHY_U1',
+  })
+  @IsOptional()
+  @IsString()
+  unitCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, if no in-scope passage clears the similarity threshold the request is ' +
+      'rejected as out-of-syllabus (HTTP 403) instead of falling back to nearest chunks.',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  rejectOutOfScope?: boolean;
+
   @ApiPropertyOptional({ description: 'Top K chunks to retrieve', example: 5, minimum: 1, maximum: 10 })
   @IsOptional()
   @IsInt()

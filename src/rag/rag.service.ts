@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -8,14 +9,21 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { PDFParse } from 'pdf-parse';
 import { PrismaService } from '../prisma/prisma.service';
+import { SyllabusDbService } from '../syllabus/syllabus-db.service';
 import { AskRagDto } from './dto/ask-rag.dto';
 import { IngestRagPdfDto } from './dto/ingest-rag-pdf.dto';
 import { IngestRagDto } from './dto/ingest-rag.dto';
+import { EmbedTopicsDto, MapTopicsDto } from './dto/map-topics.dto';
 import {
   embedChunksForDocument,
   fetchEmbeddings,
   vectorToPgLiteral,
 } from './embeddings.openai';
+import {
+  embedTopicsForSubject,
+  mapChunksToTopics,
+  topicCoverage,
+} from './topic-mapping';
 import { normalizeOptionalTextbookId } from './utils/optional-textbook-id';
 import { buildChunks, normalizeText } from './chunking';
 
@@ -27,6 +35,8 @@ type RetrievedChunk = {
   subject: string;
   class_level: number;
   chapter: string;
+  topic_code: string | null;
+  topic_name: string | null;
   similarity: number;
 };
 
@@ -37,6 +47,7 @@ export class RagService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly syllabusDb: SyllabusDbService,
   ) {}
 
   private assertPdfMagicBytes(buffer: Buffer): void {
@@ -57,6 +68,7 @@ export class RagService {
       ready: Boolean(ragConfig?.openAiApiKey),
       topK: ragConfig?.topK ?? 5,
       minSimilarity: ragConfig?.minSimilarity ?? 0.42,
+      topicMinSimilarity: ragConfig?.topicMinSimilarity ?? 0.3,
     };
   }
 
@@ -298,6 +310,115 @@ export class RagService {
     };
   }
 
+  // ============================================
+  // Syllabus topic embedding + mapping (existing data)
+  // ============================================
+
+  private async requireSubject(subjectId: string) {
+    const subject = await this.prisma.subject.findUnique({
+      where: { id: subjectId },
+    });
+    if (!subject) {
+      throw new BadRequestException(`Subject with ID ${subjectId} not found.`);
+    }
+    return subject;
+  }
+
+  private requireApiKey(): string {
+    const rag = this.configService.get('rag');
+    const apiKey = rag?.openAiApiKey ?? '';
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        'OPENAI_API_KEY is not set; embeddings are required for topic operations.',
+      );
+    }
+    return apiKey;
+  }
+
+  /** Embed (or refresh) all syllabus topics for a subject. */
+  async embedTopics(payload: EmbedTopicsDto) {
+    const subject = await this.requireSubject(payload.subjectId);
+    const apiKey = this.requireApiKey();
+    const rag = this.configService.get('rag');
+    const embedModel = rag?.embeddingModel ?? 'text-embedding-3-small';
+
+    const topicsEmbedded = await embedTopicsForSubject(
+      this.prisma,
+      apiKey,
+      embedModel,
+      subject.id,
+    );
+
+    if (topicsEmbedded === 0) {
+      throw new BadRequestException(
+        `No syllabus topics found for subject ${subject.name} (class ${subject.class}). Import a syllabus first via POST /syllabus/import.`,
+      );
+    }
+
+    return {
+      status: 'embedded',
+      subjectId: subject.id,
+      subject: subject.name,
+      classLevel: subject.class,
+      topicsEmbedded,
+      model: embedModel,
+    };
+  }
+
+  /** Assign existing chunks to their nearest syllabus topic (reuses chunk embeddings). */
+  async mapTopics(payload: MapTopicsDto) {
+    const subject = await this.requireSubject(payload.subjectId);
+    const rag = this.configService.get('rag');
+    const minSimilarity =
+      payload.minSimilarity ?? rag?.topicMinSimilarity ?? 0.3;
+    const onlyUntagged = payload.onlyUntagged ?? false;
+
+    const updated = await mapChunksToTopics(this.prisma, {
+      subjectId: subject.id,
+      subjectName: subject.name,
+      classLevel: subject.class,
+      minSimilarity,
+      onlyUntagged,
+    });
+
+    const coverage = await topicCoverage(this.prisma, {
+      subjectId: subject.id,
+      subjectName: subject.name,
+      classLevel: subject.class,
+    });
+
+    return {
+      status: 'mapped',
+      subjectId: subject.id,
+      subject: subject.name,
+      classLevel: subject.class,
+      minSimilarity,
+      onlyUntagged,
+      chunksAssigned: updated,
+      coverage,
+    };
+  }
+
+  /** Report topic coverage: chunks per topic + untagged count. */
+  async getTopicCoverage(subjectId: string) {
+    const subject = await this.requireSubject(subjectId);
+    const coverage = await topicCoverage(this.prisma, {
+      subjectId: subject.id,
+      subjectName: subject.name,
+      classLevel: subject.class,
+    });
+    return {
+      subjectId: subject.id,
+      subject: subject.name,
+      classLevel: subject.class,
+      ...coverage,
+    };
+  }
+
+  // ============================================
+  // Ask (syllabus-aware retrieval)
+  // ============================================
+
   async ask(payload: AskRagDto) {
     const rag = this.configService.get('rag');
     const apiKey = rag?.openAiApiKey ?? '';
@@ -311,6 +432,16 @@ export class RagService {
     const subjectNameFilter =
       payload.crossSubject === true ? null : scope.subjectNameFilter;
 
+    // Resolve optional syllabus topic/unit scope to concrete chunk topic_ids.
+    const topicIds = await this.syllabusDb.resolveTopicIds({
+      subjectId: scope.subjectId,
+      subjectName: scope.subjectNameFilter,
+      classLevel: scope.classLevel,
+      topicCode: payload.topicCode ?? null,
+      unitCode: payload.unitCode ?? null,
+    });
+    const topicScoped = Array.isArray(topicIds) && topicIds.length > 0;
+
     const embedModel = rag?.embeddingModel ?? 'text-embedding-3-small';
     const chatModel = rag?.chatModel ?? 'gpt-4o-mini';
     const topK = payload.topK ?? rag?.topK ?? 5;
@@ -323,6 +454,7 @@ export class RagService {
 
     const chapterFilter =
       payload.chapter?.trim() ? payload.chapter.trim() : null;
+    const poolLimit = Math.min(32, Math.max(topK * 4, topK));
 
     const classScopedPool = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
       `
@@ -334,10 +466,13 @@ export class RagService {
         d.subject,
         d.class_level,
         d.chapter,
+        t.code AS topic_code,
+        t.name AS topic_name,
         (1 - (ce.embedding <=> $1::vector(1536)))::float8 AS similarity
       FROM chunks c
       INNER JOIN chunk_embeddings ce ON ce.chunk_id = c.id
       INNER JOIN documents d ON d.id = c.document_id
+      LEFT JOIN topics t ON t.id = c.topic_id
       WHERE d.class_level = $3
         AND (
           $2::text IS NULL OR TRIM($2::text) = '' OR
@@ -347,6 +482,9 @@ export class RagService {
           $4::text IS NULL OR TRIM($4::text) = '' OR
           d.chapter ILIKE '%' || $4::text || '%'
         )
+        AND (
+          $6::text[] IS NULL OR c.topic_id = ANY($6::text[])
+        )
       ORDER BY ce.embedding <=> $1::vector(1536)
       LIMIT $5
       `,
@@ -354,7 +492,8 @@ export class RagService {
       subjectNameFilter,
       scope.classLevel,
       chapterFilter,
-      Math.min(32, Math.max(topK * 4, topK)),
+      poolLimit,
+      topicScoped ? topicIds : null,
     );
 
     const classPool = classScopedPool.map((r) => ({
@@ -376,10 +515,13 @@ export class RagService {
           d.subject,
           d.class_level,
           d.chapter,
+          t.code AS topic_code,
+          t.name AS topic_name,
           (1 - (ce.embedding <=> $1::vector(1536)))::float8 AS similarity
         FROM chunks c
         INNER JOIN chunk_embeddings ce ON ce.chunk_id = c.id
         INNER JOIN documents d ON d.id = c.document_id
+        LEFT JOIN topics t ON t.id = c.topic_id
         WHERE (
           $2::text IS NULL OR TRIM($2::text) = '' OR
           d.subject ILIKE $2::text
@@ -388,13 +530,17 @@ export class RagService {
             $3::text IS NULL OR TRIM($3::text) = '' OR
             d.chapter ILIKE '%' || $3::text || '%'
           )
+          AND (
+            $5::text[] IS NULL OR c.topic_id = ANY($5::text[])
+          )
         ORDER BY ce.embedding <=> $1::vector(1536)
         LIMIT $4
         `,
         qLiteral,
         subjectNameFilter,
         chapterFilter,
-        Math.min(32, Math.max(topK * 4, topK)),
+        poolLimit,
+        topicScoped ? topicIds : null,
       );
 
       pool = globalPoolRaw.map((r) => ({
@@ -404,7 +550,30 @@ export class RagService {
       globalClassFallback = pool.length > 0;
     }
 
+    const received = {
+      subjectId: scope.subjectId,
+      textbookId: scope.textbookId,
+      subject: subjectNameFilter,
+      crossSubject: payload.crossSubject === true,
+      classLevel: scope.classLevel,
+      chapter: payload.chapter ?? null,
+      topicCode: payload.topicCode ?? null,
+      unitCode: payload.unitCode ?? null,
+      topicScoped,
+      topK,
+      usedGlobalClassFallback: globalClassFallback,
+    };
+
     if (!pool.length) {
+      if (payload.rejectOutOfScope === true) {
+        throw new ForbiddenException({
+          status: 'out_of_scope',
+          message: topicScoped
+            ? 'No passages found within the requested syllabus topic scope.'
+            : 'No indexed passages found for the requested scope.',
+          received,
+        });
+      }
       return {
         status: 'no_context',
         answer:
@@ -414,31 +583,29 @@ export class RagService {
         fallback: true,
         message:
           'No chunk_embeddings found in class scope or global fallback scope.',
-        received: {
-          subjectId: scope.subjectId,
-          textbookId: scope.textbookId,
-          subject: subjectNameFilter,
-          crossSubject: payload.crossSubject === true,
-          classLevel: scope.classLevel,
-          chapter: payload.chapter ?? null,
-          topK,
-          usedGlobalClassFallback: globalClassFallback,
-        },
+        received,
       };
     }
 
     let chosen = pool.filter((r) => r.similarity >= minSimilarity).slice(0, topK);
     let relaxedSimilarity = false;
     if (!chosen.length) {
+      if (payload.rejectOutOfScope === true) {
+        throw new ForbiddenException({
+          status: 'out_of_scope',
+          message: `No passage met the minimum similarity (${minSimilarity}); question appears out of syllabus scope.`,
+          received,
+        });
+      }
       chosen = pool.slice(0, Math.min(topK, 3));
       relaxedSimilarity = true;
     }
 
     const contextBlocks = chosen
-      .map(
-        (r, i) =>
-          `[${i + 1}] ${r.title} — ${r.chapter} (similarity ${r.similarity.toFixed(3)})\n${r.content}`,
-      )
+      .map((r, i) => {
+        const topicTag = r.topic_code ? ` [${r.topic_code} · ${r.topic_name}]` : '';
+        return `[${i + 1}] ${r.title} — ${r.chapter}${topicTag} (similarity ${r.similarity.toFixed(3)})\n${r.content}`;
+      })
       .join('\n\n---\n\n');
 
     const openai = new OpenAI({ apiKey });
@@ -474,6 +641,8 @@ export class RagService {
         subject: r.subject,
         title: r.title,
         chapter: r.chapter,
+        topicCode: r.topic_code,
+        topicName: r.topic_name,
         chunkId: r.chunk_id,
         similarity: r.similarity,
       })),
@@ -484,16 +653,7 @@ export class RagService {
         : globalClassFallback
           ? `No class-${scope.classLevel} chunks found; used nearest chunks from available classes.`
           : undefined,
-      received: {
-        subjectId: scope.subjectId,
-        textbookId: scope.textbookId,
-        subject: subjectNameFilter,
-        crossSubject: payload.crossSubject === true,
-        classLevel: scope.classLevel,
-        chapter: payload.chapter ?? null,
-        topK,
-        usedGlobalClassFallback: globalClassFallback,
-      },
+      received,
     };
   }
 }

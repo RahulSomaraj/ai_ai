@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AskRagDto } from './dto/ask-rag.dto';
 import { IngestRagDto } from './dto/ingest-rag.dto';
 import { IngestRagPdfDto } from './dto/ingest-rag-pdf.dto';
+import { EmbedTopicsDto, MapTopicsDto } from './dto/map-topics.dto';
 import { RagService } from './rag.service';
 
 @ApiTags('RAG')
@@ -117,9 +128,51 @@ export class RagController {
     return this.ragService.ingestPdf(file, payload);
   }
 
+  // ============================================
+  // Syllabus topic embedding + mapping
+  // ============================================
+
+  @Post('topics/embed')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Embed syllabus topics for a subject',
+    description:
+      'Generates and stores a vector for each syllabus topic (name + learning outcomes). ' +
+      'Run this after POST /syllabus/import and before POST /rag/topics/map.',
+  })
+  @ApiResponse({ status: 200, description: 'Topics embedded' })
+  embedTopics(@Body() payload: EmbedTopicsDto) {
+    return this.ragService.embedTopics(payload);
+  }
+
+  @Post('topics/map')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Map existing chunks to syllabus topics',
+    description:
+      'Assigns every in-scope chunk to its nearest syllabus topic using the vectors ' +
+      'already stored for chunks and topics. No content re-processing required.',
+  })
+  @ApiResponse({ status: 200, description: 'Chunks mapped to topics' })
+  mapTopics(@Body() payload: MapTopicsDto) {
+    return this.ragService.mapTopics(payload);
+  }
+
+  @Get('topics/coverage/:subjectId')
+  @ApiOperation({
+    summary: 'Topic coverage for a subject',
+    description: 'Chunk count per topic plus how many in-scope chunks remain untagged.',
+  })
+  @ApiResponse({ status: 200, description: 'Coverage returned' })
+  topicCoverage(@Param('subjectId') subjectId: string) {
+    return this.ragService.getTopicCoverage(subjectId);
+  }
+
   @Post('ask')
-  @ApiOperation({ summary: 'Ask an NCERT doubt question via RAG' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Ask an NCERT doubt question via RAG (syllabus-aware)' })
   @ApiResponse({ status: 200, description: 'RAG answer returned' })
+  @ApiResponse({ status: 403, description: 'Out of syllabus scope (when rejectOutOfScope=true)' })
   ask(@Body() payload: AskRagDto) {
     return this.ragService.ask(payload);
   }
