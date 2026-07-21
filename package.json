@@ -27,7 +27,8 @@
     "prisma:curl-samples": "ts-node prisma/print-rag-curls.ts",
     "prisma:seed:rag-physics11": "ts-node prisma/seed-rag-physics11.ts",
     "prisma:seed:rag-physics-questions": "ts-node prisma/seed-rag-physics-questions.ts",
-    "prisma:seed:rag-physics11-book": "ts-node prisma/seed-rag-physics11-book.ts"
+    "prisma:seed:rag-physics11-book": "ts-node prisma/seed-rag-physics11-book.ts",
+    "prisma:seed:rag-science12-topics": "ts-node prisma/seed-rag-science12-topics.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
