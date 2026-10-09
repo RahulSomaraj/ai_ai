@@ -25,6 +25,7 @@ import {
   topicCoverage,
 } from './topic-mapping';
 import { normalizeOptionalTextbookId } from './utils/optional-textbook-id';
+import { queryVectorRows } from './utils/vector-query';
 import { buildChunks, normalizeText } from './chunking';
 
 type RetrievedChunk = {
@@ -455,8 +456,10 @@ export class RagService {
     const chapterFilter =
       payload.chapter?.trim() ? payload.chapter.trim() : null;
     const poolLimit = Math.min(32, Math.max(topK * 4, topK));
+    const sourceTypeFilter = payload.sourceType?.trim() || null;
 
-    const classScopedPool = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
+    const classScopedPool = await queryVectorRows<RetrievedChunk>(
+      this.prisma,
       `
       SELECT
         c.id AS chunk_id,
@@ -485,6 +488,7 @@ export class RagService {
         AND (
           $6::text[] IS NULL OR c.topic_id = ANY($6::text[])
         )
+        AND ($7::text IS NULL OR d.source_type = $7::text)
       ORDER BY ce.embedding <=> $1::vector(1536)
       LIMIT $5
       `,
@@ -494,6 +498,7 @@ export class RagService {
       chapterFilter,
       poolLimit,
       topicScoped ? topicIds : null,
+      sourceTypeFilter,
     );
 
     const classPool = classScopedPool.map((r) => ({
@@ -505,7 +510,8 @@ export class RagService {
     let globalClassFallback = false;
 
     if (!pool.length) {
-      const globalPoolRaw = await this.prisma.$queryRawUnsafe<RetrievedChunk[]>(
+      const globalPoolRaw = await queryVectorRows<RetrievedChunk>(
+        this.prisma,
         `
         SELECT
           c.id AS chunk_id,
@@ -533,6 +539,7 @@ export class RagService {
           AND (
             $5::text[] IS NULL OR c.topic_id = ANY($5::text[])
           )
+          AND ($6::text IS NULL OR d.source_type = $6::text)
         ORDER BY ce.embedding <=> $1::vector(1536)
         LIMIT $4
         `,
@@ -541,6 +548,7 @@ export class RagService {
         chapterFilter,
         poolLimit,
         topicScoped ? topicIds : null,
+        sourceTypeFilter,
       );
 
       pool = globalPoolRaw.map((r) => ({

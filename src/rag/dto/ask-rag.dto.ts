@@ -91,6 +91,16 @@ export class AskRagDto {
   @IsBoolean()
   rejectOutOfScope?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'Only use content from one source/board, e.g. "ncert_book" (CBSE) or ' +
+      '"scert_kerala_book" (Kerala State). Omit to search all sources.',
+    example: 'scert_kerala_book',
+  })
+  @IsOptional()
+  @IsString()
+  sourceType?: string;
+
   @ApiPropertyOptional({ description: 'Top K chunks to retrieve', example: 5, minimum: 1, maximum: 10 })
   @IsOptional()
   @IsInt()

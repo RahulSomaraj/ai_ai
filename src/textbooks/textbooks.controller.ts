@@ -47,6 +47,20 @@ export class TextbooksController {
     return this.textbooksService.findOne(id);
   }
 
+  @Get(':id/chapters')
+  @ApiOperation({
+    summary: 'List the chapters of a textbook',
+    description:
+      'Chapters are the RAG documents ingested for this textbook (one per chapter, or a ' +
+      'single whole-volume entry when no table of contents was found), with PDF page ' +
+      'range and chunk count.',
+  })
+  @ApiResponse({ status: 200, description: 'Textbook with its chapters' })
+  @ApiResponse({ status: 404, description: 'Textbook not found' })
+  async findChapters(@Param('id') id: string) {
+    return this.textbooksService.findChapters(id);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Update textbook' })
   @ApiResponse({ status: 200, description: 'Textbook updated' })
