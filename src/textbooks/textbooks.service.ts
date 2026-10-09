@@ -81,6 +81,53 @@ export class TextbooksService {
     return textbook;
   }
 
+  /**
+   * Chapters of a textbook, read from its RAG documents. Documents have no
+   * textbook FK; seeded ones use ids `<textbookId>-chNN` (or `<textbookId>-full`),
+   * so they are matched by id prefix. Textbooks without ingested content
+   * return an empty list.
+   */
+  async findChapters(id: string) {
+    const textbook = await this.findOne(id);
+
+    const docs = await this.prisma.ragDocument.findMany({
+      where: { id: { startsWith: `${id}-` } },
+      select: {
+        id: true,
+        title: true,
+        chapter: true,
+        sourcePath: true,
+        _count: { select: { chunks: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const chapters = docs.map((doc, index) => {
+      const pages = /#pages=(\d+)-(\d+)$/.exec(doc.sourcePath ?? '');
+      const tocNumber = /— Ch (\d+):/.exec(doc.title);
+      return {
+        documentId: doc.id,
+        number: tocNumber ? Number(tocNumber[1]) : index + 1,
+        title: doc.chapter,
+        wholeVolume: doc.id.endsWith('-full'),
+        pdfPages: pages ? { from: Number(pages[1]), to: Number(pages[2]) } : null,
+        chunkCount: doc._count.chunks,
+      };
+    });
+
+    return {
+      textbook: {
+        id: textbook.id,
+        title: textbook.title,
+        source: textbook.source,
+        subject: textbook.subject.name,
+        classLevel: textbook.subject.class,
+      },
+      chapterCount: chapters.length,
+      chapters,
+    };
+  }
+
   async findBySubject(subjectId: string) {
     // Verify subject exists
     const subject = await this.prisma.subject.findUnique({
