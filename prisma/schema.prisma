@@ -15,15 +15,16 @@ datasource db {
 // ============================================
 
 model Subject {
-  id        String     @id @default(uuid())
-  name      String     // e.g., "Physics"
-  class     Int        // e.g., 11
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id        String   @id @default(uuid())
+  name      String // e.g., "Physics"
+  class     Int // e.g., 11
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  textbooks Textbook[]
-  units     Unit[]
+  textbooks    Textbook[]
+  units        Unit[]
+  chatSessions ChatSession[]
 
   // Indexes for common queries
   @@index([name, class])
@@ -31,21 +32,22 @@ model Subject {
 }
 
 model Textbook {
-  id         String   @id @default(uuid())
+  id        String   @id @default(uuid())
   subjectId String
-  title      String   // e.g., "Physics Part 1"
-  code       String?  // e.g., "PH11-P1" (optional identifier)
-  order      Int      // Order within subject (1, 2, 3...)
-  source     String   @default("NCERT") // e.g., "NCERT", "State Board"
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  title     String // e.g., "Physics Part 1"
+  code      String? // e.g., "PH11-P1" (optional identifier)
+  order     Int // Order within subject (1, 2, 3...)
+  source    String   @default("NCERT") // e.g., "NCERT", "State Board"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chatSessions ChatSession[]
 
+  @@unique([subjectId, order])
   // Indexes
   @@index([subjectId, order])
-  @@unique([subjectId, order])
   @@map("textbooks")
 }
 
@@ -59,8 +61,8 @@ model Textbook {
 model Unit {
   id        String   @id @default(uuid())
   subjectId String   @map("subject_id")
-  code      String   // syllabus unit id, e.g. "PHY_U1"
-  name      String   // e.g. "Units and Measurement"
+  code      String // syllabus unit id, e.g. "PHY_U1"
+  name      String // e.g. "Units and Measurement"
   order     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -76,8 +78,8 @@ model Unit {
 model Topic {
   id               String   @id @default(uuid())
   unitId           String   @map("unit_id")
-  code             String   // syllabus topic id, e.g. "PHY_U1_T1"
-  name             String   // e.g. "Significant Figures"
+  code             String // syllabus topic id, e.g. "PHY_U1_T1"
+  name             String // e.g. "Significant Figures"
   learningOutcomes String[] @default([]) @map("learning_outcomes")
   order            Int      @default(0)
   createdAt        DateTime @default(now()) @map("created_at")
@@ -145,12 +147,57 @@ model RagChunk {
 }
 
 model RagChunkEmbedding {
-  chunkId   String                  @id @map("chunk_id")
+  chunkId   String                      @id @map("chunk_id")
   embedding Unsupported("vector(1536)")
   model     String
-  createdAt DateTime                @default(now()) @map("created_at")
+  createdAt DateTime                    @default(now()) @map("created_at")
 
   chunk RagChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
 
   @@map("chunk_embeddings")
+}
+
+// ============================================
+// CHAT HISTORY (Sessions and Q&A turns)
+// ============================================
+// A session is one conversation (one row in the "recent history" list).
+// Each message is one question + its RAG answer (one turn in the chat view).
+
+model ChatSession {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  title         String // first ~60 chars of the opening question
+  subjectId     String?   @map("subject_id")
+  textbookId    String?   @map("textbook_id")
+  classLevel    Int       @map("class_level")
+  sourceType    String?   @map("source_type") // e.g. "ncert_book", "scert_kerala_book"
+  lastMessageAt DateTime  @default(now()) @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at") // soft delete
+
+  subject  Subject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  textbook Textbook?     @relation(fields: [textbookId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+
+  @@index([userId, lastMessageAt(sort: Desc)])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id                 String   @id @default(uuid())
+  sessionId          String   @map("session_id")
+  question           String
+  standaloneQuestion String?  @map("standalone_question") // follow-up rewritten for retrieval
+  answer             String
+  status             String // "answered" | "no_context" | "out_of_scope"
+  citations          Json     @default("[]")
+  confidence         Float    @default(0)
+  fallback           Boolean  @default(false)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
 }

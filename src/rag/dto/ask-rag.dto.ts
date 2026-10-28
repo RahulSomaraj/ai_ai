@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { TransformOptionalTextbookId } from '../utils/optional-textbook-id';
 
 export class AskRagDto {
@@ -100,6 +109,27 @@ export class AskRagDto {
   @IsOptional()
   @IsString()
   sourceType?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Student ID. When set, the question and answer are saved to chat history. ' +
+      'Omit to answer without saving.',
+    example: 'stu_1024',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  userId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Chat session to continue (from a previous response). Omit to start a new chat; ' +
+      'requires userId.',
+  })
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
 
   @ApiPropertyOptional({ description: 'Top K chunks to retrieve', example: 5, minimum: 1, maximum: 10 })
   @IsOptional()

@@ -6,10 +6,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ChatSession } from '@prisma/client';
 import OpenAI from 'openai';
 import { PDFParse } from 'pdf-parse';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyllabusDbService } from '../syllabus/syllabus-db.service';
+import { ChatHistoryService, ChatTurnRecord } from './chat-history.service';
 import { AskRagDto } from './dto/ask-rag.dto';
 import { IngestRagPdfDto } from './dto/ingest-rag-pdf.dto';
 import { IngestRagDto } from './dto/ingest-rag.dto';
@@ -49,6 +51,7 @@ export class RagService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly syllabusDb: SyllabusDbService,
+    private readonly chatHistory: ChatHistoryService,
   ) {}
 
   private assertPdfMagicBytes(buffer: Buffer): void {
@@ -429,6 +432,15 @@ export class RagService {
       );
     }
 
+    // Continue an existing chat (404 if missing / not owned) or start a new one on save.
+    const session = await this.chatHistory.findSessionForAsk(
+      payload.userId,
+      payload.sessionId,
+    );
+    const history = session
+      ? await this.chatHistory.recentTurns(session.id)
+      : [];
+
     const scope = await this.resolveAskScope(payload);
     const subjectNameFilter =
       payload.crossSubject === true ? null : scope.subjectNameFilter;
@@ -448,8 +460,15 @@ export class RagService {
     const topK = payload.topK ?? rag?.topK ?? 5;
     const minSimilarity = rag?.minSimilarity ?? 0.42;
 
+    const question = payload.question.trim();
+    const openai = new OpenAI({ apiKey });
+    // Follow-ups like "give an example" are rewritten so retrieval knows the subject.
+    const standaloneQuestion = history.length
+      ? await this.condenseQuestion(openai, chatModel, history, question)
+      : null;
+
     const [qVec] = await fetchEmbeddings(apiKey, embedModel, [
-      payload.question.trim(),
+      standaloneQuestion ?? question,
     ]);
     const qLiteral = vectorToPgLiteral(qVec);
 
@@ -574,16 +593,30 @@ export class RagService {
 
     if (!pool.length) {
       if (payload.rejectOutOfScope === true) {
+        const message = topicScoped
+          ? 'No passages found within the requested syllabus topic scope.'
+          : 'No indexed passages found for the requested scope.';
         throw new ForbiddenException({
           status: 'out_of_scope',
-          message: topicScoped
-            ? 'No passages found within the requested syllabus topic scope.'
-            : 'No indexed passages found for the requested scope.',
+          message,
           received,
+          ...(await this.saveChatTurn(
+            payload,
+            session,
+            standaloneQuestion,
+            received,
+            {
+              answer: message,
+              status: 'out_of_scope',
+              citations: [],
+              confidence: 0,
+              fallback: false,
+            },
+          )),
         });
       }
-      return {
-        status: 'no_context',
+      const result = {
+        status: 'no_context' as const,
         answer:
           'No indexed textbook passages found for the requested scope (or embeddings are missing). Ingest content or run embedding backfill for existing documents.',
         citations: [],
@@ -593,16 +626,40 @@ export class RagService {
           'No chunk_embeddings found in class scope or global fallback scope.',
         received,
       };
+      return {
+        ...result,
+        ...(await this.saveChatTurn(
+          payload,
+          session,
+          standaloneQuestion,
+          received,
+          result,
+        )),
+      };
     }
 
     let chosen = pool.filter((r) => r.similarity >= minSimilarity).slice(0, topK);
     let relaxedSimilarity = false;
     if (!chosen.length) {
       if (payload.rejectOutOfScope === true) {
+        const message = `No passage met the minimum similarity (${minSimilarity}); question appears out of syllabus scope.`;
         throw new ForbiddenException({
           status: 'out_of_scope',
-          message: `No passage met the minimum similarity (${minSimilarity}); question appears out of syllabus scope.`,
+          message,
           received,
+          ...(await this.saveChatTurn(
+            payload,
+            session,
+            standaloneQuestion,
+            received,
+            {
+              answer: message,
+              status: 'out_of_scope',
+              citations: [],
+              confidence: 0,
+              fallback: false,
+            },
+          )),
         });
       }
       chosen = pool.slice(0, Math.min(topK, 3));
@@ -616,7 +673,6 @@ export class RagService {
       })
       .join('\n\n---\n\n');
 
-    const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
       model: chatModel,
       temperature: 0.25,
@@ -626,9 +682,13 @@ export class RagService {
           content:
             'You are a concise NCERT-aligned tutor. Answer only from the CONTEXT. If context is insufficient, say so in one sentence.',
         },
+        ...history.flatMap((turn) => [
+          { role: 'user' as const, content: turn.question },
+          { role: 'assistant' as const, content: turn.answer },
+        ]),
         {
           role: 'user',
-          content: `CONTEXT:\n${contextBlocks}\n\nQUESTION:\n${payload.question.trim()}`,
+          content: `CONTEXT:\n${contextBlocks}\n\nQUESTION:\n${question}`,
         },
       ],
     });
@@ -640,8 +700,8 @@ export class RagService {
     const avgSim =
       chosen.reduce((s, r) => s + r.similarity, 0) / chosen.length;
 
-    return {
-      status: 'answered',
+    const result = {
+      status: 'answered' as const,
       answer,
       citations: chosen.map((r) => ({
         documentId: r.doc_id,
@@ -663,5 +723,84 @@ export class RagService {
           : undefined,
       received,
     };
+    return {
+      ...result,
+      ...(await this.saveChatTurn(
+        payload,
+        session,
+        standaloneQuestion,
+        received,
+        result,
+      )),
+    };
+  }
+
+  /** Rewrites a follow-up into a self-contained question using the earlier turns. */
+  private async condenseQuestion(
+    openai: OpenAI,
+    chatModel: string,
+    history: { question: string; answer: string }[],
+    question: string,
+  ): Promise<string | null> {
+    const transcript = history
+      .map((turn) => `Student: ${turn.question}\nTutor: ${turn.answer}`)
+      .join('\n\n');
+    const completion = await openai.chat.completions.create({
+      model: chatModel,
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            "Rewrite the student's latest question as a standalone question that can be understood " +
+            'without the conversation. Keep it short. If it is already standalone, return it unchanged. ' +
+            'Return only the question.',
+        },
+        {
+          role: 'user',
+          content: `CONVERSATION:\n${transcript}\n\nLATEST QUESTION:\n${question}`,
+        },
+      ],
+    });
+    return completion.choices[0]?.message?.content?.trim() || null;
+  }
+
+  /** Saves the turn to chat history when the caller identified a user; no-op otherwise. */
+  private async saveChatTurn(
+    payload: AskRagDto,
+    session: ChatSession | null,
+    standaloneQuestion: string | null,
+    received: {
+      subjectId: string | null;
+      textbookId: string | null;
+      classLevel: number;
+    },
+    outcome: Pick<
+      ChatTurnRecord,
+      'answer' | 'status' | 'confidence' | 'fallback'
+    > & {
+      citations: object[];
+    },
+  ): Promise<{ sessionId?: string; messageId?: string }> {
+    if (!payload.userId) {
+      return {};
+    }
+    return this.chatHistory.saveTurn({
+      userId: payload.userId,
+      session,
+      scope: {
+        subjectId: received.subjectId,
+        textbookId: received.textbookId,
+        classLevel: received.classLevel,
+        sourceType: payload.sourceType?.trim() || null,
+      },
+      question: payload.question.trim(),
+      standaloneQuestion,
+      answer: outcome.answer,
+      status: outcome.status,
+      citations: outcome.citations as ChatTurnRecord['citations'],
+      confidence: outcome.confidence,
+      fallback: outcome.fallback,
+    });
   }
 }

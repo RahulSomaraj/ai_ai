@@ -1,17 +1,25 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ChatHistoryService } from './chat-history.service';
 import { AskRagDto } from './dto/ask-rag.dto';
+import {
+  ChatOwnerQueryDto,
+  ListChatMessagesQueryDto,
+  ListChatSessionsQueryDto,
+} from './dto/chat-history.dto';
 import { IngestRagDto } from './dto/ingest-rag.dto';
 import { IngestRagPdfDto } from './dto/ingest-rag-pdf.dto';
 import { EmbedTopicsDto, MapTopicsDto } from './dto/map-topics.dto';
@@ -20,7 +28,10 @@ import { RagService } from './rag.service';
 @ApiTags('RAG')
 @Controller('rag')
 export class RagController {
-  constructor(private readonly ragService: RagService) {}
+  constructor(
+    private readonly ragService: RagService,
+    private readonly chatHistory: ChatHistoryService,
+  ) {}
 
   @Get('status')
   @ApiOperation({ summary: 'Get RAG module status' })
@@ -175,5 +186,53 @@ export class RagController {
   @ApiResponse({ status: 403, description: 'Out of syllabus scope (when rejectOutOfScope=true)' })
   ask(@Body() payload: AskRagDto) {
     return this.ragService.ask(payload);
+  }
+
+  // ============================================
+  // Chat history
+  // ============================================
+
+  @Get('sessions')
+  @ApiOperation({
+    summary: 'Recent chat history',
+    description:
+      "The user's chat sessions, most recently active first (cursor-paginated).",
+  })
+  @ApiResponse({ status: 200, description: 'Sessions returned' })
+  listSessions(@Query() query: ListChatSessionsQueryDto) {
+    return this.chatHistory.listSessions(
+      query.userId,
+      query.limit,
+      query.cursor,
+    );
+  }
+
+  @Get('sessions/:id/messages')
+  @ApiOperation({
+    summary: 'Messages of one chat session',
+    description:
+      'Questions and answers in chronological order. The first call returns the newest page; ' +
+      'pass nextCursor to load older messages.',
+  })
+  @ApiResponse({ status: 200, description: 'Messages returned' })
+  @ApiResponse({ status: 404, description: 'Session not found for this user' })
+  listMessages(
+    @Param('id') id: string,
+    @Query() query: ListChatMessagesQueryDto,
+  ) {
+    return this.chatHistory.listMessages(
+      query.userId,
+      id,
+      query.limit,
+      query.cursor,
+    );
+  }
+
+  @Delete('sessions/:id')
+  @ApiOperation({ summary: 'Delete a chat session (soft delete)' })
+  @ApiResponse({ status: 200, description: 'Session deleted' })
+  @ApiResponse({ status: 404, description: 'Session not found for this user' })
+  deleteSession(@Param('id') id: string, @Query() query: ChatOwnerQueryDto) {
+    return this.chatHistory.deleteSession(query.userId, id);
   }
 }
