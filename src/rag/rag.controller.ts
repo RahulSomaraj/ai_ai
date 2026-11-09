@@ -1,3 +1,4 @@
+import { ApiContract } from '../config/api-docs';
 import {
   Body,
   Controller,
@@ -11,7 +12,13 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ChatHistoryService } from './chat-history.service';
 import { AskRagDto } from './dto/ask-rag.dto';
@@ -34,6 +41,7 @@ export class RagController {
     private readonly chatHistory: ChatHistoryService,
   ) {}
 
+  @ApiContract('rag.getStatus')
   @Get('status')
   @ApiOperation({ summary: 'Get RAG module status' })
   @ApiResponse({ status: 200, description: 'RAG module status returned' })
@@ -41,6 +49,7 @@ export class RagController {
     return this.ragService.getStatus();
   }
 
+  @ApiContract('rag.ingest')
   @Post('ingest')
   @ApiOperation({ summary: 'Ingest NCERT content for RAG' })
   @ApiResponse({ status: 201, description: 'Ingestion request accepted' })
@@ -48,6 +57,7 @@ export class RagController {
     return this.ragService.ingest(payload);
   }
 
+  @ApiContract('rag.ingestPdf')
   @Post('ingest/pdf')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -61,17 +71,26 @@ export class RagController {
       'Equivalent curl: `curl -sS -X POST "http://localhost:3000/v1/rag/ingest/pdf" -F "file=@/path/to/file.pdf" -F "subjectId=seed-11-physics" ...`',
     schema: {
       type: 'object',
-      required: ['file', 'subjectId', 'subject', 'classLevel', 'chapter', 'title'],
+      required: [
+        'file',
+        'subjectId',
+        'subject',
+        'classLevel',
+        'chapter',
+        'title',
+      ],
       properties: {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'PDF bytes (max 20 MB). In curl: -F "file=@E:/path/to/your.pdf"',
+          description:
+            'PDF bytes (max 20 MB). In curl: -F "file=@E:/path/to/your.pdf"',
         },
         subjectId: {
           type: 'string',
           example: 'seed-11-physics',
-          description: 'Subject id from seed (see GET /v1/textbooks?subjectId=…)',
+          description:
+            'Subject id from seed (see GET /v1/textbooks?subjectId=…)',
         },
         textbookId: {
           type: 'string',
@@ -82,7 +101,8 @@ export class RagController {
         subject: {
           type: 'string',
           example: 'Physics',
-          description: 'Subject name; must match the subject row for classLevel',
+          description:
+            'Subject name; must match the subject row for classLevel',
         },
         classLevel: {
           type: 'integer',
@@ -109,7 +129,8 @@ export class RagController {
         sourcePath: {
           type: 'string',
           example: 'ncert-phy-11-1.pdf',
-          description: 'Logical filename or path label stored with the document',
+          description:
+            'Logical filename or path label stored with the document',
         },
       },
     },
@@ -144,6 +165,7 @@ export class RagController {
   // Syllabus topic embedding + mapping
   // ============================================
 
+  @ApiContract('rag.embedTopics')
   @Post('topics/embed')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -157,6 +179,7 @@ export class RagController {
     return this.ragService.embedTopics(payload);
   }
 
+  @ApiContract('rag.mapTopics')
   @Post('topics/map')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -170,21 +193,29 @@ export class RagController {
     return this.ragService.mapTopics(payload);
   }
 
+  @ApiContract('rag.topicCoverage', ['subjectId'])
   @Get('topics/coverage/:subjectId')
   @ApiOperation({
     summary: 'Topic coverage for a subject',
-    description: 'Chunk count per topic plus how many in-scope chunks remain untagged.',
+    description:
+      'Chunk count per topic plus how many in-scope chunks remain untagged.',
   })
   @ApiResponse({ status: 200, description: 'Coverage returned' })
   topicCoverage(@Param('subjectId') subjectId: string) {
     return this.ragService.getTopicCoverage(subjectId);
   }
 
+  @ApiContract('rag.ask')
   @Post('ask')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Ask an NCERT doubt question via RAG (syllabus-aware)' })
+  @ApiOperation({
+    summary: 'Ask an NCERT doubt question via RAG (syllabus-aware)',
+  })
   @ApiResponse({ status: 200, description: 'RAG answer returned' })
-  @ApiResponse({ status: 403, description: 'Out of syllabus scope (when rejectOutOfScope=true)' })
+  @ApiResponse({
+    status: 403,
+    description: 'Out of syllabus scope (when rejectOutOfScope=true)',
+  })
   ask(@Body() payload: AskRagDto) {
     return this.ragService.ask(payload);
   }
@@ -193,6 +224,7 @@ export class RagController {
   // Chat history
   // ============================================
 
+  @ApiContract('rag.lastQuestion')
   @Get('last-question')
   @ApiOperation({
     summary: 'Get the last asked question',
@@ -200,13 +232,17 @@ export class RagController {
       'Returns the latest saved question for userId, optionally within sessionId. ' +
       'Deleted sessions are excluded. Returns null when there are no saved questions.',
   })
-  @ApiResponse({ status: 200, description: 'Latest question, or null if none exists' })
+  @ApiResponse({
+    status: 200,
+    description: 'Latest question, or null if none exists',
+  })
   @ApiResponse({ status: 400, description: 'Invalid query parameters' })
   @ApiResponse({ status: 404, description: 'Session not found for this user' })
   lastQuestion(@Query() query: LastQuestionQueryDto) {
     return this.chatHistory.lastQuestion(query.userId, query.sessionId);
   }
 
+  @ApiContract('rag.listSessions')
   @Get('sessions')
   @ApiOperation({
     summary: 'Recent chat history',
@@ -222,6 +258,7 @@ export class RagController {
     );
   }
 
+  @ApiContract('rag.listMessages', ['id'])
   @Get('sessions/:id/messages')
   @ApiOperation({
     summary: 'Messages of one chat session',
@@ -243,6 +280,7 @@ export class RagController {
     );
   }
 
+  @ApiContract('rag.deleteSession', ['id'])
   @Delete('sessions/:id')
   @ApiOperation({ summary: 'Delete a chat session (soft delete)' })
   @ApiResponse({ status: 200, description: 'Session deleted' })

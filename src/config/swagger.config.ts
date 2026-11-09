@@ -6,7 +6,11 @@ export const swaggerConfig = registerAs('swagger', () => ({
   title: process.env.SWAGGER_TITLE || 'AI AI API - Academic Management System',
   description:
     process.env.SWAGGER_DESCRIPTION ||
-    'Foundation system for managing subjects, textbooks, and syllabus. Clean architecture with Subject → Textbook structure, ready for syllabus integration.',
+    'Academic APIs for subjects, textbooks and chapters, syllabus import and retrieval, RAG ingestion and questions, and saved chat history. ' +
+      'Ask requires question and classLevel. Include userId to save history and sessionId to continue a conversation; omitting sessionId starts a new conversation. ' +
+      'GET /rag/last-question automatically looks up the latest saved question when only userId is supplied. ' +
+      'History endpoints currently use caller-supplied userId as a filter; it is not authentication. ' +
+      'Legacy file-based syllabus routes are labelled [Legacy].',
   version: process.env.SWAGGER_VERSION || '1.0',
   contact: {
     name: process.env.SWAGGER_CONTACT_NAME || 'API Support',

@@ -1,3 +1,4 @@
+import { ApiContract } from '../config/api-docs';
 import {
   Controller,
   Get,
@@ -30,6 +31,7 @@ export class SyllabusController {
   // Postgres-backed syllabus (drives RAG scope)
   // ============================================
 
+  @ApiContract('syllabus.importSyllabus')
   @Post('import')
   @ApiOperation({
     summary: 'Import a syllabus into Postgres (units + topics)',
@@ -44,6 +46,7 @@ export class SyllabusController {
     return this.syllabusDbService.importSyllabus(dto);
   }
 
+  @ApiContract('syllabus.getDbStructure', ['subjectId'])
   @Get('db/:subjectId/structure')
   @ApiOperation({ summary: 'Get units + topics for a subject (from Postgres)' })
   @ApiResponse({ status: 200, description: 'Syllabus structure returned' })
@@ -51,8 +54,11 @@ export class SyllabusController {
     return this.syllabusDbService.getStructure(subjectId);
   }
 
+  @ApiContract('syllabus.getDbTopics', ['subjectId'])
   @Get('db/:subjectId/topics')
-  @ApiOperation({ summary: 'Flat list of topics for a subject (from Postgres)' })
+  @ApiOperation({
+    summary: 'Flat list of topics for a subject (from Postgres)',
+  })
   @ApiResponse({ status: 200, description: 'Topics returned' })
   async getDbTopics(@Param('subjectId') subjectId: string) {
     return this.syllabusDbService.getTopics(subjectId);
@@ -62,6 +68,7 @@ export class SyllabusController {
   // Legacy file-based syllabus (kept for compatibility)
   // ============================================
 
+  @ApiContract('syllabus.createSyllabus')
   @Post()
   @ApiOperation({
     summary: '[Legacy] Create or update a file-based syllabus (JSON on disk)',
@@ -73,6 +80,7 @@ export class SyllabusController {
     return this.syllabusService.createSyllabus(createSyllabusDto);
   }
 
+  @ApiContract('syllabus.getCurrentTopics', ['board'])
   @Get(':board/current-topics')
   @ApiOperation({
     summary: '[Legacy] Get current topics across all classes for a board',
@@ -84,8 +92,11 @@ export class SyllabusController {
     return this.syllabusService.getCurrentTopics(board, subject);
   }
 
+  @ApiContract('syllabus.getSyllabus', ['board', 'grade', 'subject'])
   @Get(':board/:grade/:subject')
-  @ApiOperation({ summary: '[Legacy] Get syllabus by board, grade, and subject' })
+  @ApiOperation({
+    summary: '[Legacy] Get syllabus by board, grade, and subject',
+  })
   @ApiResponse({ status: 200, description: 'Syllabus retrieved successfully' })
   async getSyllabus(
     @Param('board') board: string,
@@ -95,6 +106,7 @@ export class SyllabusController {
     return this.syllabusService.getSyllabus(board, grade, subject);
   }
 
+  @ApiContract('syllabus.getAllTopics', ['board', 'grade', 'subject'])
   @Get(':board/:grade/:subject/topics')
   @ApiOperation({ summary: '[Legacy] Get all topics for a syllabus' })
   async getAllTopics(
@@ -105,6 +117,12 @@ export class SyllabusController {
     return this.syllabusService.getAllTopics(board, grade, subject);
   }
 
+  @ApiContract('syllabus.getTopicById', [
+    'board',
+    'grade',
+    'subject',
+    'topicId',
+  ])
   @Get(':board/:grade/:subject/topics/:topicId')
   @ApiOperation({ summary: '[Legacy] Get a specific topic by ID' })
   async getTopicById(
@@ -116,8 +134,11 @@ export class SyllabusController {
     return this.syllabusService.getTopicById(board, grade, subject, topicId);
   }
 
+  @ApiContract('syllabus.getAllLearningOutcomes', ['board', 'grade', 'subject'])
   @Get(':board/:grade/:subject/learning-outcomes')
-  @ApiOperation({ summary: '[Legacy] Get all learning outcomes for a syllabus' })
+  @ApiOperation({
+    summary: '[Legacy] Get all learning outcomes for a syllabus',
+  })
   async getAllLearningOutcomes(
     @Param('board') board: string,
     @Param('grade') grade: string,
@@ -126,10 +147,12 @@ export class SyllabusController {
     return this.syllabusService.getAllLearningOutcomes(board, grade, subject);
   }
 
+  @ApiContract('syllabus.mapQuery', ['board', 'grade', 'subject'])
   @Post(':board/:grade/:subject/query/map')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '[Legacy] Map a user query to syllabus topics and learning outcomes',
+    summary:
+      '[Legacy] Map a user query to syllabus topics and learning outcomes',
   })
   @ApiResponse({ status: 200, description: 'Query mapped successfully' })
   async mapQuery(
@@ -146,9 +169,12 @@ export class SyllabusController {
     );
   }
 
+  @ApiContract('syllabus.validateQuery', ['board', 'grade', 'subject'])
   @Post(':board/:grade/:subject/query/validate')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '[Legacy] Validate if a query is within syllabus scope' })
+  @ApiOperation({
+    summary: '[Legacy] Validate if a query is within syllabus scope',
+  })
   async validateQuery(
     @Param('board') board: string,
     @Param('grade') grade: string,

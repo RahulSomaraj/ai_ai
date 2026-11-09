@@ -87,7 +87,11 @@ npm run start:dev
 
 ### 4. Access Swagger Documentation
 
-Visit: `http://localhost:3000/api`
+Visit: `http://localhost:3000/v1/docs`
+
+OpenAPI JSON: `http://localhost:3000/v1/docs-json`. The prefix and documentation path are configurable with `GLOBAL_PREFIX` and `SWAGGER_PATH`; Swagger can be disabled with `SWAGGER_ENABLED=false`.
+
+Swagger covers all 36 routes, including request fields, optional query filters, response schemas and examples, and relevant error responses. For `POST /v1/rag/ask`, use the new-chat, follow-up, or minimum-fields request example. The response documents `sessionId` (conversation) and `messageId` (one saved question-and-answer turn). These IDs are returned only when history is saved with `userId`.
 
 ## 📝 Example: Creating a Syllabus
 

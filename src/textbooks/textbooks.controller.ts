@@ -1,3 +1,4 @@
+import { ApiContract } from '../config/api-docs';
 import {
   Controller,
   Get,
@@ -20,6 +21,7 @@ import { UpdateTextbookDto } from './dto/update-textbook.dto';
 export class TextbooksController {
   constructor(private readonly textbooksService: TextbooksService) {}
 
+  @ApiContract('textbooks.create')
   @Post()
   @ApiOperation({ summary: 'Create a new textbook' })
   @ApiResponse({ status: 201, description: 'Textbook created successfully' })
@@ -29,6 +31,7 @@ export class TextbooksController {
     return this.textbooksService.create(createTextbookDto);
   }
 
+  @ApiContract('textbooks.findAll')
   @Get()
   @ApiOperation({ summary: 'Get all textbooks' })
   @ApiResponse({ status: 200, description: 'List of all textbooks' })
@@ -39,6 +42,7 @@ export class TextbooksController {
     return this.textbooksService.findAll();
   }
 
+  @ApiContract('textbooks.findOne', ['id'])
   @Get(':id')
   @ApiOperation({ summary: 'Get textbook by ID' })
   @ApiResponse({ status: 200, description: 'Textbook found' })
@@ -47,6 +51,7 @@ export class TextbooksController {
     return this.textbooksService.findOne(id);
   }
 
+  @ApiContract('textbooks.findChapters', ['id'])
   @Get(':id/chapters')
   @ApiOperation({
     summary: 'List the chapters of a textbook',
@@ -61,15 +66,20 @@ export class TextbooksController {
     return this.textbooksService.findChapters(id);
   }
 
+  @ApiContract('textbooks.update', ['id'])
   @Patch(':id')
   @ApiOperation({ summary: 'Update textbook' })
   @ApiResponse({ status: 200, description: 'Textbook updated' })
   @ApiResponse({ status: 404, description: 'Textbook not found' })
   @ApiResponse({ status: 400, description: 'Order conflict' })
-  async update(@Param('id') id: string, @Body() updateTextbookDto: UpdateTextbookDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateTextbookDto: UpdateTextbookDto,
+  ) {
     return this.textbooksService.update(id, updateTextbookDto);
   }
 
+  @ApiContract('textbooks.remove', ['id'])
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete textbook' })
@@ -79,6 +89,7 @@ export class TextbooksController {
     return this.textbooksService.remove(id);
   }
 
+  @ApiContract('textbooks.findBySubject', ['subjectId'])
   @Get('subject/:subjectId')
   @ApiOperation({ summary: 'Get all textbooks for a subject' })
   @ApiResponse({ status: 200, description: 'List of textbooks' })

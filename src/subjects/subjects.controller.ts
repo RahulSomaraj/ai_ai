@@ -1,3 +1,4 @@
+import { ApiContract } from '../config/api-docs';
 import {
   Controller,
   Get,
@@ -20,6 +21,7 @@ import { UpdateSubjectDto } from './dto/update-subject.dto';
 export class SubjectsController {
   constructor(private readonly subjectsService: SubjectsService) {}
 
+  @ApiContract('subjects.create')
   @Post()
   @ApiOperation({ summary: 'Create a new subject' })
   @ApiResponse({ status: 201, description: 'Subject created successfully' })
@@ -27,6 +29,7 @@ export class SubjectsController {
     return this.subjectsService.create(createSubjectDto);
   }
 
+  @ApiContract('subjects.findAll')
   @Get()
   @ApiOperation({ summary: 'Get all subjects' })
   @ApiResponse({ status: 200, description: 'List of all subjects' })
@@ -40,6 +43,7 @@ export class SubjectsController {
     return this.subjectsService.findAll();
   }
 
+  @ApiContract('subjects.findOne', ['id'])
   @Get(':id')
   @ApiOperation({ summary: 'Get subject by ID' })
   @ApiResponse({ status: 200, description: 'Subject found' })
@@ -48,14 +52,19 @@ export class SubjectsController {
     return this.subjectsService.findOne(id);
   }
 
+  @ApiContract('subjects.update', ['id'])
   @Patch(':id')
   @ApiOperation({ summary: 'Update subject' })
   @ApiResponse({ status: 200, description: 'Subject updated' })
   @ApiResponse({ status: 404, description: 'Subject not found' })
-  async update(@Param('id') id: string, @Body() updateSubjectDto: UpdateSubjectDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateSubjectDto: UpdateSubjectDto,
+  ) {
     return this.subjectsService.update(id, updateSubjectDto);
   }
 
+  @ApiContract('subjects.remove', ['id'])
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete subject' })
@@ -65,6 +74,7 @@ export class SubjectsController {
     return this.subjectsService.remove(id);
   }
 
+  @ApiContract('subjects.getTextbooksCount', ['id'])
   @Get(':id/textbooks/count')
   @ApiOperation({ summary: 'Get textbooks count for a subject' })
   async getTextbooksCount(@Param('id') id: string) {

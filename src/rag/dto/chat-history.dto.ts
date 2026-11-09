@@ -21,7 +21,12 @@ export class ChatOwnerQueryDto {
 }
 
 export class LastQuestionQueryDto extends ChatOwnerQueryDto {
-  @ApiPropertyOptional({ description: 'Limit the lookup to one chat session' })
+  @ApiPropertyOptional({
+    description:
+      'Optional. Omit to automatically find the latest question across all active sessions for userId.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    minLength: 1,
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -32,6 +37,7 @@ export class ListChatSessionsQueryDto extends ChatOwnerQueryDto {
   @ApiPropertyOptional({
     description: 'Page size',
     example: 20,
+    default: 20,
     minimum: 1,
     maximum: 50,
   })
@@ -54,6 +60,7 @@ export class ListChatMessagesQueryDto extends ChatOwnerQueryDto {
   @ApiPropertyOptional({
     description: 'Page size',
     example: 50,
+    default: 50,
     minimum: 1,
     maximum: 100,
   })

@@ -56,7 +56,12 @@ export class AskRagDto {
   @IsBoolean()
   crossSubject?: boolean;
 
-  @ApiProperty({ description: 'Class level filter', example: 10, minimum: 1, maximum: 12 })
+  @ApiProperty({
+    description: 'Class level filter',
+    example: 10,
+    minimum: 1,
+    maximum: 12,
+  })
   @IsInt()
   @Min(1)
   @Max(12)
@@ -125,13 +130,19 @@ export class AskRagDto {
   @ApiPropertyOptional({
     description:
       'Chat session to continue (from a previous response). Omit to start a new chat; ' +
-      'requires userId.',
+      'requires userId. The latest session is not selected automatically.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsOptional()
   @IsString()
   sessionId?: string;
 
-  @ApiPropertyOptional({ description: 'Top K chunks to retrieve', example: 5, minimum: 1, maximum: 10 })
+  @ApiPropertyOptional({
+    description: 'Top K chunks to retrieve',
+    example: 5,
+    minimum: 1,
+    maximum: 10,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
