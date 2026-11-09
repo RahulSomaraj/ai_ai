@@ -105,6 +105,22 @@ export class ChatHistoryService {
     return { sessionId: turn.session.id, messageId: created.id };
   }
 
+  /** Latest saved question across the user's active sessions, or in one session. */
+  async lastQuestion(userId: string, sessionId?: string) {
+    if (sessionId) {
+      await this.getOwnedSession(userId, sessionId);
+    }
+
+    return this.prisma.chatMessage.findFirst({
+      where: {
+        ...(sessionId ? { sessionId } : {}),
+        session: { userId, deletedAt: null },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { id: true, sessionId: true, question: true, createdAt: true },
+    });
+  }
+
   /** Recent history: the user's sessions, most recently active first. */
   async listSessions(userId: string, limit = 20, cursor?: string) {
     const rows = await this.prisma.chatSession.findMany({

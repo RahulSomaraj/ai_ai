@@ -20,6 +20,14 @@ export class ChatOwnerQueryDto {
   userId: string;
 }
 
+export class LastQuestionQueryDto extends ChatOwnerQueryDto {
+  @ApiPropertyOptional({ description: 'Limit the lookup to one chat session' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  sessionId?: string;
+}
+
 export class ListChatSessionsQueryDto extends ChatOwnerQueryDto {
   @ApiPropertyOptional({
     description: 'Page size',

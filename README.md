@@ -53,6 +53,8 @@ A Retrieval-Augmented Generation (RAG) system that uses **frozen syllabus docume
 
 ### RAG Queries
 
+- `GET /v1/rag/last-question?userId=stu_1024` - Latest saved question across the user's active chat sessions. Add `&sessionId=<session-id>` to limit it to one session. Returns `{ id, sessionId, question, createdAt }`, or `null` if no questions exist. A missing, deleted, or unowned session returns 404. Questions are saved when `/v1/rag/ask` includes `userId`; requests without it do not appear in history. The `/v1` prefix is configurable through `GLOBAL_PREFIX`.
+
 - `POST /rag/query` - Process RAG query (main endpoint)
 - `POST /rag/validate` - Validate query without processing
 

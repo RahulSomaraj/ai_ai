@@ -17,6 +17,7 @@ import { ChatHistoryService } from './chat-history.service';
 import { AskRagDto } from './dto/ask-rag.dto';
 import {
   ChatOwnerQueryDto,
+  LastQuestionQueryDto,
   ListChatMessagesQueryDto,
   ListChatSessionsQueryDto,
 } from './dto/chat-history.dto';
@@ -191,6 +192,20 @@ export class RagController {
   // ============================================
   // Chat history
   // ============================================
+
+  @Get('last-question')
+  @ApiOperation({
+    summary: 'Get the last asked question',
+    description:
+      'Returns the latest saved question for userId, optionally within sessionId. ' +
+      'Deleted sessions are excluded. Returns null when there are no saved questions.',
+  })
+  @ApiResponse({ status: 200, description: 'Latest question, or null if none exists' })
+  @ApiResponse({ status: 400, description: 'Invalid query parameters' })
+  @ApiResponse({ status: 404, description: 'Session not found for this user' })
+  lastQuestion(@Query() query: LastQuestionQueryDto) {
+    return this.chatHistory.lastQuestion(query.userId, query.sessionId);
+  }
 
   @Get('sessions')
   @ApiOperation({
