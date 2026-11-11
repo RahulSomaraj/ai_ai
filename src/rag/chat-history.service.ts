@@ -132,6 +132,7 @@ export class ChatHistoryService {
         id: true,
         title: true,
         subjectId: true,
+        subject: { select: { name: true } },
         textbookId: true,
         classLevel: true,
         sourceType: true,
@@ -149,8 +150,9 @@ export class ChatHistoryService {
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     return {
-      items: page.map(({ _count, messages, ...session }) => ({
+      items: page.map(({ _count, messages, subject, ...session }) => ({
         ...session,
+        subjectName: subject?.name ?? null,
         messageCount: _count.messages,
         lastQuestion: messages[0]?.question ?? null,
       })),

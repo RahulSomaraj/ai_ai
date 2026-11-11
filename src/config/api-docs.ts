@@ -306,6 +306,7 @@ const schemas = {
     items: arr(
       obj({
         ...session.properties,
+        subjectName: nullable(str('Physics')),
         messageCount: int,
         lastQuestion: nullable(str('What are SI base units?')),
       }),
