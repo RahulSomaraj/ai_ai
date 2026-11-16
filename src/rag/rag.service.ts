@@ -210,9 +210,18 @@ export class RagService {
     }
 
     if (subjectName) {
+      // Link the chat session to the subject when the name matches a known subject,
+      // so history can show it; retrieval still filters by name either way.
+      const subjectRecord = await this.prisma.subject.findFirst({
+        where: {
+          name: { equals: subjectName, mode: 'insensitive' },
+          class: payload.classLevel,
+        },
+        select: { id: true },
+      });
       return {
         subjectNameFilter: subjectName,
-        subjectId: null,
+        subjectId: subjectRecord?.id ?? null,
         textbookId: null,
         classLevel: payload.classLevel,
       };
